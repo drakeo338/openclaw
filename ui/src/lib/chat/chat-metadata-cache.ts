@@ -11,6 +11,7 @@ import {
   modelCatalogKey,
   modelCatalogParams,
   type ModelCatalogInvalidation,
+  type ModelCatalogRead,
 } from "../model-catalog-cache.ts";
 import { readSessionChangedEvent } from "../sessions/reconcile.ts";
 import type { UiSessionDefaultsHost } from "../sessions/session-key.ts";
@@ -26,7 +27,10 @@ export type ChatMetadataUpdate =
   | { type: "error"; error: unknown };
 export type ChatMetadataPublication = {
   isCurrent: () => boolean;
-  publish: (result: ChatMetadataResponse) => ChatMetadataResult;
+  publish: (
+    result: ChatMetadataResponse,
+    settled?: () => void,
+  ) => ChatMetadataResult | Promise<ChatMetadataResult>;
   fail: (error: unknown) => void;
 };
 export type ChatMetadataRequest = {
@@ -57,7 +61,7 @@ export type ChatMetadataEntry = {
   writer?: object;
   refreshRevision: number;
   refreshAfter?: number;
-  validateCatalog?: boolean;
+  validateCatalog?: ReadonlySet<ModelCatalogRead>;
   catalogRevision: number;
   refresh?: ChatMetadataRefreshRecord;
   listeners: Map<(update: ChatMetadataUpdate) => void, () => boolean>;
