@@ -4,6 +4,7 @@ import type { ManagedGatewayBinding } from "../../src/daemon/managed-gateway-bin
 import type { GatewayServiceEnv, GatewayServiceState } from "../../src/daemon/service-types.ts";
 import { hasErrnoCode } from "../../src/infra/errno.ts";
 import { hasCommandProcessCleanupError } from "../../src/process/exec-result.ts";
+import { dedupeByKey } from "../../src/shared/dedupe-by-key.ts";
 
 type LiveGatewayDistFenceResult = { refuse: true; message: string } | { refuse: false };
 type LaunchAgentHint = { target: string; sourcePath: string };
@@ -21,35 +22,6 @@ function bindingFromProcessEnv(env: NodeJS.ProcessEnv): ManagedGatewayBinding {
     profile: normalizeFenceProfile(env.OPENCLAW_PROFILE),
     env: env as GatewayServiceEnv,
   };
-}
-
-function bindingSelectorKey(binding: ManagedGatewayBinding): string {
-  return [
-    binding.profile,
-    binding.scope ?? binding.systemdReadTarget?.scope ?? "",
-    binding.systemdReadTarget?.unitPath ?? "",
-    binding.launchAgentPlistPath ?? "",
-    binding.windowsStartupEntry
-      ? path.win32.normalize(binding.windowsStartupEntry).toLowerCase()
-      : "",
-    binding.env.OPENCLAW_SYSTEMD_UNIT ?? "",
-    binding.env.OPENCLAW_LAUNCHD_LABEL ?? "",
-    binding.env.OPENCLAW_WINDOWS_TASK_NAME ?? "",
-  ].join("\0");
-}
-
-function dedupeBindings(bindings: readonly ManagedGatewayBinding[]): ManagedGatewayBinding[] {
-  const seen = new Set<string>();
-  const out: ManagedGatewayBinding[] = [];
-  for (const binding of bindings) {
-    const key = bindingSelectorKey(binding);
-    if (seen.has(key)) {
-      continue;
-    }
-    seen.add(key);
-    out.push(binding);
-  }
-  return out;
 }
 
 function formatServiceHint(profile: string, action: "stop" | "start"): string {
@@ -245,7 +217,7 @@ async function resolveFenceBindings(
     const current = bindingFromProcessEnv(env);
     const inspect = await import("../../src/daemon/managed-gateway-bindings.ts");
     const discovered = await inspect.discoverManagedGatewayBindings(env, { requireComplete });
-    return dedupeBindings([current, ...discovered]);
+    return dedupeByKey([current, ...discovered], inspect.resolveManagedGatewayBindingKey);
   } catch (error) {
     if (hasCommandProcessCleanupError(error)) {
       throw error;

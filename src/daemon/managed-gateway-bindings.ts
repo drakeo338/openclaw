@@ -53,7 +53,7 @@ export async function readManagedGatewayBindingState(
   });
 }
 
-function bindingSelectorKey(binding: ManagedGatewayBinding): string {
+export function resolveManagedGatewayBindingKey(binding: ManagedGatewayBinding): string {
   return [
     binding.profile,
     binding.scope ?? binding.systemdReadTarget?.scope ?? "",
@@ -237,7 +237,7 @@ export async function discoverManagedGatewayBindings(
   const results: ManagedGatewayBinding[] = [];
   const seen = new Set<string>();
   const push = (binding: ManagedGatewayBinding) => {
-    const key = bindingSelectorKey(binding);
+    const key = resolveManagedGatewayBindingKey(binding);
     if (seen.has(key)) {
       return;
     }

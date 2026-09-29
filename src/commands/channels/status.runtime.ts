@@ -1,5 +1,7 @@
 // Runtime-only rendering and config fallback for `openclaw channels status`.
+import { asFiniteNumber } from "@openclaw/normalization-core/number-coercion";
 import { normalizeOptionalLowercaseString } from "@openclaw/normalization-core/string-coerce";
+import { filterStringEntries } from "@openclaw/normalization-core/string-normalization";
 import { formatDocsLink } from "../../../packages/terminal-core/src/links.js";
 import { theme } from "../../../packages/terminal-core/src/theme.js";
 import { normalizeChannelId } from "../../channels/plugins/index.js";
@@ -34,21 +36,13 @@ function formatEventLoopBits(value: unknown): string | null {
   if (record.degraded !== true) {
     return null;
   }
-  const reasons = Array.isArray(record.reasons)
-    ? record.reasons.filter((reason): reason is string => typeof reason === "string")
-    : [];
+  const reasons = filterStringEntries(record.reasons);
   const delayMaxMs =
     typeof record.delayMaxMs === "number" && Number.isFinite(record.delayMaxMs)
       ? Math.round(record.delayMaxMs)
       : null;
-  const utilization =
-    typeof record.utilization === "number" && Number.isFinite(record.utilization)
-      ? record.utilization
-      : null;
-  const cpuCoreRatio =
-    typeof record.cpuCoreRatio === "number" && Number.isFinite(record.cpuCoreRatio)
-      ? record.cpuCoreRatio
-      : null;
+  const utilization = asFiniteNumber(record.utilization) ?? null;
+  const cpuCoreRatio = asFiniteNumber(record.cpuCoreRatio) ?? null;
   const degradedSinceMs =
     typeof record.degradedSinceMs === "number" && Number.isFinite(record.degradedSinceMs)
       ? Math.max(0, record.degradedSinceMs)
@@ -105,19 +99,9 @@ export function formatGatewayChannelsStatusLines(payload: Record<string, unknown
       if (typeof account.connected === "boolean") {
         bits.push(account.connected ? "connected" : "disconnected");
       }
-      const inboundAt =
-        typeof account.lastInboundAt === "number" && Number.isFinite(account.lastInboundAt)
-          ? account.lastInboundAt
-          : null;
-      const outboundAt =
-        typeof account.lastOutboundAt === "number" && Number.isFinite(account.lastOutboundAt)
-          ? account.lastOutboundAt
-          : null;
-      const transportAt =
-        typeof account.lastTransportActivityAt === "number" &&
-        Number.isFinite(account.lastTransportActivityAt)
-          ? account.lastTransportActivityAt
-          : null;
+      const inboundAt = asFiniteNumber(account.lastInboundAt) ?? null;
+      const outboundAt = asFiniteNumber(account.lastOutboundAt) ?? null;
+      const transportAt = asFiniteNumber(account.lastTransportActivityAt) ?? null;
       if (inboundAt) {
         bits.push(`in:${formatTimeAgo(Date.now() - inboundAt)}`);
       }
