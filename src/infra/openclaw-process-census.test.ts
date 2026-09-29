@@ -345,7 +345,14 @@ it("recognizes an owned service marker without guessing from its script name", (
   });
   expect(inspectOtherOpenClawProcesses()).toEqual({ pids: [peer] });
 });
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  if (getuidDescriptor) {
+    Object.defineProperty(process, "getuid", getuidDescriptor);
+  } else {
+    Reflect.deleteProperty(process, "getuid");
+  }
+});
 
 it("exempts self and its verified Doctor launcher, but not a same-group peer or child", () => {
   rows.set(peer, { ppid: 1, argv: ["openclaw", "doctor"] });
