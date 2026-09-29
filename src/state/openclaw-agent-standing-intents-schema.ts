@@ -12,12 +12,10 @@ export const STANDING_INTENTS_FTS_SHADOW_TABLES = [
   "standing_intents_fts_idx",
 ] as const;
 
-type StandingIntentColumnInfo = { name?: unknown };
-
 function ensureStandingIntentCreatorColumn(db: DatabaseSync): void {
   const columns = /* sqlite-allow-raw -- Canonical additive schema inspection only. */ db
     .prepare("PRAGMA table_info(standing_intents)")
-    .all() as StandingIntentColumnInfo[];
+    .all();
   if (columns.some((column) => column.name === "creator_sender")) {
     return;
   }

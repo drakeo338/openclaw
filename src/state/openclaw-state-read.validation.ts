@@ -7,31 +7,35 @@ import { isPluginBlobReadCommand } from "../plugin-state/plugin-blob-worker-cont
 import { isTuiLastSessionReadCommand } from "../tui/tui-last-session.contract.js";
 import type { OpenClawStateReadRequest } from "./openclaw-state-read.types.js";
 
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((entry) => typeof entry === "string");
+}
+
 export function isReadRequest(input: unknown): input is OpenClawStateReadRequest {
   if (!isRecord(input) || !isRecord(input.context) || !isRecord(input.command)) {
     return false;
   }
-  const { environment } = input.context;
+  const { command, context } = input;
+  const { environment } = context;
   return (
     typeof input.databasePath === "string" &&
     typeof input.location === "string" &&
     typeof input.checkFreshAdmission === "boolean" &&
     (input.expectedIdentity === undefined || typeof input.expectedIdentity === "string") &&
     (input.snapshotRoot === undefined || typeof input.snapshotRoot === "string") &&
-    (input.context.existingSchemaPath === undefined ||
-      typeof input.context.existingSchemaPath === "string") &&
+    (context.existingSchemaPath === undefined || typeof context.existingSchemaPath === "string") &&
     isRecord(environment) &&
     typeof environment.OPENCLAW_STATE_DIR === "string" &&
     (environment.OPENCLAW_SUPERVISOR_MODE === undefined ||
       environment.OPENCLAW_SUPERVISOR_MODE === "external") &&
-    ((input.command.type === "deliveryQueue.outbound" &&
-      (input.command.id === undefined || typeof input.command.id === "string") &&
-      (input.command.mode === "pending" || input.command.mode === "unfinished")) ||
-      input.command.type === "acpSessions.list" ||
-      (input.command.type === "acpSessions.metadata" &&
-        Array.isArray(input.command.entries) &&
-        input.command.entries.length <= 64 &&
-        input.command.entries.every(
+    ((command.type === "deliveryQueue.outbound" &&
+      (command.id === undefined || typeof command.id === "string") &&
+      (command.mode === "pending" || command.mode === "unfinished")) ||
+      command.type === "acpSessions.list" ||
+      (command.type === "acpSessions.metadata" &&
+        Array.isArray(command.entries) &&
+        command.entries.length <= 64 &&
+        command.entries.every(
           (entry) =>
             isRecord(entry) &&
             Array.isArray(entry.keys) &&
@@ -47,227 +51,196 @@ export function isReadRequest(input: unknown): input is OpenClawStateReadRequest
                 (entry.entry.sessionStartedAt === undefined ||
                   typeof entry.entry.sessionStartedAt === "number"))),
         )) ||
-      (input.command.type === "mcpOAuth.statuses" &&
-        Array.isArray(input.command.input) &&
-        input.command.input.every((key) => typeof key === "string")) ||
-      ((input.command.type === "mcpOAuth.readOnly" ||
-        input.command.type === "mcpOAuth.keys" ||
-        input.command.type === "mcpOAuth.pending" ||
-        input.command.type === "mcpOAuth.countPrincipals") &&
-        typeof input.command.input === "string") ||
-      (input.command.type === "capture.readOnlyEvents" &&
-        typeof input.command.sessionId === "string" &&
-        (input.command.limit === undefined || typeof input.command.limit === "number")) ||
-      (input.command.type === "capture.readOnlyBlob" && typeof input.command.blobId === "string") ||
-      isPluginBlobReadCommand(input.command) ||
-      isChannelIngressReadCommand(input.command) ||
-      (input.command.type === "conversationBindings.inspect" &&
-        isRecord(input.command.conversation) &&
-        typeof input.command.conversation.channel === "string" &&
-        typeof input.command.conversation.accountId === "string" &&
-        typeof input.command.conversation.conversationId === "string" &&
-        (input.command.conversation.parentConversationId === undefined ||
-          typeof input.command.conversation.parentConversationId === "string")) ||
-      (input.command.type === "cron.activeReceiptOwners" &&
-        typeof input.command.agentId === "string") ||
-      (input.command.type === "cron.jobNames" &&
-        (input.command.storePath === undefined || typeof input.command.storePath === "string") &&
-        Array.isArray(input.command.jobIds) &&
-        input.command.jobIds.every((id) => typeof id === "string")) ||
-      (input.command.type === "cron.observeRunRecovery" &&
-        typeof input.command.storeKey === "string" &&
-        Array.isArray(input.command.proposals) &&
-        input.command.proposals.every(
+      (command.type === "mcpOAuth.statuses" && isStringArray(command.input)) ||
+      ((command.type === "mcpOAuth.readOnly" ||
+        command.type === "mcpOAuth.keys" ||
+        command.type === "mcpOAuth.pending" ||
+        command.type === "mcpOAuth.countPrincipals") &&
+        typeof command.input === "string") ||
+      (command.type === "capture.readOnlyEvents" &&
+        typeof command.sessionId === "string" &&
+        (command.limit === undefined || typeof command.limit === "number")) ||
+      (command.type === "capture.readOnlyBlob" && typeof command.blobId === "string") ||
+      isPluginBlobReadCommand(command) ||
+      isChannelIngressReadCommand(command) ||
+      (command.type === "conversationBindings.inspect" &&
+        isRecord(command.conversation) &&
+        typeof command.conversation.channel === "string" &&
+        typeof command.conversation.accountId === "string" &&
+        typeof command.conversation.conversationId === "string" &&
+        (command.conversation.parentConversationId === undefined ||
+          typeof command.conversation.parentConversationId === "string")) ||
+      (command.type === "cron.activeReceiptOwners" && typeof command.agentId === "string") ||
+      (command.type === "cron.jobNames" &&
+        (command.storePath === undefined || typeof command.storePath === "string") &&
+        isStringArray(command.jobIds)) ||
+      (command.type === "cron.observeRunRecovery" &&
+        typeof command.storeKey === "string" &&
+        Array.isArray(command.proposals) &&
+        command.proposals.every(
           (proposal: unknown) =>
             isRecord(proposal) &&
             typeof proposal.jobId === "string" &&
             (proposal.queuedAtMs === undefined || typeof proposal.queuedAtMs === "number") &&
             (proposal.runningAtMs === undefined || typeof proposal.runningAtMs === "number"),
         )) ||
-      (input.command.type === "devicePairing.list" && typeof input.command.nowMs === "number") ||
-      (input.command.type === "devicePairing.lookup" &&
-        typeof input.command.deviceId === "string") ||
-      (input.command.type === "devicePairing.pending" &&
-        typeof input.command.requestId === "string" &&
-        typeof input.command.nowMs === "number") ||
-      (input.command.type === "devicePairing.bootstrapContext" &&
-        isRecord(input.command.input) &&
-        typeof input.command.input.token === "string" &&
-        typeof input.command.input.deviceId === "string" &&
-        typeof input.command.input.publicKey === "string" &&
-        typeof input.command.input.nowMs === "number") ||
-      input.command.type === "admit" ||
-      input.command.type === "subagents.sessionList" ||
-      (input.command.type === "subagents.forChildSession" &&
-        typeof input.command.childSessionKey === "string") ||
-      (input.command.type === "subagents.runs" &&
-        isRecord(input.command.scope) &&
-        (input.command.scope.kind === "all" ||
-          input.command.scope.kind === "maintenance" ||
-          (input.command.scope.kind === "session" &&
-            typeof input.command.scope.sessionKey === "string") ||
-          (input.command.scope.kind === "descendants" &&
-            Array.isArray(input.command.scope.sessionKeys) &&
-            input.command.scope.sessionKeys.every((key: unknown) => typeof key === "string") &&
-            Array.isArray(input.command.scope.liveTopology) &&
-            input.command.scope.liveTopology.every(
+      (command.type === "devicePairing.list" && typeof command.nowMs === "number") ||
+      (command.type === "devicePairing.lookup" && typeof command.deviceId === "string") ||
+      (command.type === "devicePairing.pending" &&
+        typeof command.requestId === "string" &&
+        typeof command.nowMs === "number") ||
+      (command.type === "devicePairing.bootstrapContext" &&
+        isRecord(command.input) &&
+        typeof command.input.token === "string" &&
+        typeof command.input.deviceId === "string" &&
+        typeof command.input.publicKey === "string" &&
+        typeof command.input.nowMs === "number") ||
+      command.type === "admit" ||
+      command.type === "subagents.sessionList" ||
+      (command.type === "subagents.forChildSession" &&
+        typeof command.childSessionKey === "string") ||
+      (command.type === "subagents.runs" &&
+        isRecord(command.scope) &&
+        (command.scope.kind === "all" ||
+          command.scope.kind === "maintenance" ||
+          (command.scope.kind === "session" && typeof command.scope.sessionKey === "string") ||
+          (command.scope.kind === "descendants" &&
+            isStringArray(command.scope.sessionKeys) &&
+            Array.isArray(command.scope.liveTopology) &&
+            command.scope.liveTopology.every(
               (link: unknown) =>
                 isRecord(link) &&
                 typeof link.childSessionKey === "string" &&
                 typeof link.requesterSessionKey === "string",
             )) ||
-          (input.command.scope.kind === "ids" &&
-            Array.isArray(input.command.scope.runIds) &&
-            input.command.scope.runIds.every((runId: unknown) => typeof runId === "string")))) ||
-      input.command.type === "exec-approvals.read" ||
-      ((input.command.type === "skills.library.descriptions" ||
-        input.command.type === "skills.library.manifests") &&
-        Array.isArray(input.command.input) &&
-        input.command.input.length <= SKILL_LIBRARY_MAX_SELECTIONS &&
-        input.command.input.every(
+          (command.scope.kind === "ids" && isStringArray(command.scope.runIds)))) ||
+      command.type === "exec-approvals.read" ||
+      ((command.type === "skills.library.descriptions" ||
+        command.type === "skills.library.manifests") &&
+        Array.isArray(command.input) &&
+        command.input.length <= SKILL_LIBRARY_MAX_SELECTIONS &&
+        command.input.every(
           (pin) =>
             isRecord(pin) && typeof pin.skillId === "string" && typeof pin.revision === "string",
         )) ||
-      input.command.type === "agentDatabaseRegistry.read" ||
-      (input.command.type === "agentDatabaseDeletion.snapshot" &&
-        (input.command.purpose === "runtime" || input.command.purpose === "maintenance")) ||
-      (input.command.type === "agentDeletionJournal.status" &&
-        typeof input.command.agentId === "string") ||
-      input.command.type === "sessionGroups.snapshot" ||
-      (input.command.type === "sessionGroups.members" && isRecord(input.command.cfg)) ||
-      (input.command.type === "workerEnvironments.snapshot" &&
-        (input.command.ids === undefined ||
-          (Array.isArray(input.command.ids) &&
-            input.command.ids.every((id) => typeof id === "string")))) ||
-      (input.command.type === "workerEnvironments.pruneCandidates" &&
-        isRecord(input.command.input) &&
-        typeof input.command.input.nowMs === "number" &&
-        (input.command.input.limit === undefined ||
-          typeof input.command.input.limit === "number") &&
-        (input.command.input.cursor === undefined ||
-          (isRecord(input.command.input.cursor) &&
-            typeof input.command.input.cursor.changedAtMs === "number" &&
-            typeof input.command.input.cursor.environmentId === "string"))) ||
-      input.command.type === "userProfiles.catalog" ||
-      (input.command.type === "userPreferences.values" &&
-        typeof input.command.key === "string" &&
-        Array.isArray(input.command.profileIds) &&
-        input.command.profileIds.every((id) => typeof id === "string")) ||
-      input.command.type === "config.snapshot.read" ||
-      (input.command.type === "githubPublication.lifecycle" &&
-        (input.command.publicationKind === "shared" ||
-          input.command.publicationKind === "personal") &&
-        typeof input.command.requestId === "string") ||
-      ((input.command.type === "githubPublication.request" ||
-        input.command.type === "githubRepository.request") &&
-        typeof input.command.requestId === "string") ||
-      ((input.command.type === "githubPublication.knownPullRequestUrls" ||
-        input.command.type === "githubRepository.knownPullRequestUrls") &&
-        isRecord(input.command.input)) ||
-      ((input.command.type === "userProfiles.reconcile" ||
-        input.command.type === "userProfiles.avatar.inspect") &&
-        typeof input.command.profileId === "string") ||
-      (input.command.type === "userProfiles.avatar.read" &&
-        typeof input.command.profileId === "string" &&
-        isRecord(input.command.expected) &&
-        typeof input.command.expected.canonicalProfileId === "string" &&
-        typeof input.command.expected.sha256 === "string" &&
-        typeof input.command.expected.mime === "string") ||
-      (input.command.type === "userProfiles.channelIdentity.list" &&
-        typeof input.command.profileId === "string") ||
-      (input.command.type === "userProfiles.authority.resolve" &&
-        typeof input.command.profileId === "string") ||
-      (input.command.type === "userProfiles.githubIdentity.cached" &&
-        typeof input.command.accountId === "number" &&
-        typeof input.command.email === "string") ||
-      (input.command.type === "userProfiles.githubAttribution.resolve" &&
-        Array.isArray(input.command.profileIds) &&
-        input.command.profileIds.every((profileId) => typeof profileId === "string")) ||
-      (input.command.type === "userProfiles.channelIdentity.resolve" &&
-        (Check(UserChannelIdentitySchema, input.command.identity) ||
-          (isRecord(input.command.identity) &&
-            typeof input.command.identity.authorizationId === "string" &&
-            isRecord(input.command.identity.policy)))) ||
-      (input.command.type === "userProfiles.email.resolve" &&
-        typeof input.command.email === "string") ||
-      (input.command.type === "audit.run.inspect" &&
-        isRecord(input.command.input) &&
-        typeof input.command.input.now === "number" &&
-        (typeof input.command.input.runId === "string" ||
-          typeof input.command.input.executionId === "string")) ||
-      (input.command.type === "githubPublication.sharedObservation" &&
-        isRecord(input.command.input) &&
-        (input.command.input.kind === "repository" || input.command.input.kind === "worktree") &&
-        isRecord(input.command.input.session) &&
-        typeof input.command.input.session.agentId === "string" &&
-        typeof input.command.input.session.sessionKey === "string" &&
-        typeof input.command.input.session.sessionId === "string" &&
-        isRecord(input.command.input.selector) &&
-        isRecord(input.command.input.entry)) ||
-      (input.command.type === "sessionRepositoryWorkspaces.find" &&
-        Array.isArray(input.command.owners) &&
-        input.command.owners.every(
+      command.type === "agentDatabaseRegistry.read" ||
+      (command.type === "agentDatabaseDeletion.snapshot" &&
+        (command.purpose === "runtime" || command.purpose === "maintenance")) ||
+      (command.type === "agentDeletionJournal.status" && typeof command.agentId === "string") ||
+      command.type === "sessionGroups.snapshot" ||
+      (command.type === "sessionGroups.members" && isRecord(command.cfg)) ||
+      (command.type === "workerEnvironments.snapshot" &&
+        (command.ids === undefined || isStringArray(command.ids))) ||
+      (command.type === "workerEnvironments.pruneCandidates" &&
+        isRecord(command.input) &&
+        typeof command.input.nowMs === "number" &&
+        (command.input.limit === undefined || typeof command.input.limit === "number") &&
+        (command.input.cursor === undefined ||
+          (isRecord(command.input.cursor) &&
+            typeof command.input.cursor.changedAtMs === "number" &&
+            typeof command.input.cursor.environmentId === "string"))) ||
+      command.type === "userProfiles.catalog" ||
+      (command.type === "userPreferences.values" &&
+        typeof command.key === "string" &&
+        isStringArray(command.profileIds)) ||
+      command.type === "config.snapshot.read" ||
+      (command.type === "githubPublication.lifecycle" &&
+        (command.publicationKind === "shared" || command.publicationKind === "personal") &&
+        typeof command.requestId === "string") ||
+      ((command.type === "githubPublication.request" ||
+        command.type === "githubRepository.request") &&
+        typeof command.requestId === "string") ||
+      ((command.type === "githubPublication.knownPullRequestUrls" ||
+        command.type === "githubRepository.knownPullRequestUrls") &&
+        isRecord(command.input)) ||
+      ((command.type === "userProfiles.reconcile" ||
+        command.type === "userProfiles.avatar.inspect" ||
+        command.type === "userProfiles.channelIdentity.list" ||
+        command.type === "userProfiles.authority.resolve") &&
+        typeof command.profileId === "string") ||
+      (command.type === "userProfiles.avatar.read" &&
+        typeof command.profileId === "string" &&
+        isRecord(command.expected) &&
+        typeof command.expected.canonicalProfileId === "string" &&
+        typeof command.expected.sha256 === "string" &&
+        typeof command.expected.mime === "string") ||
+      (command.type === "userProfiles.githubIdentity.cached" &&
+        typeof command.accountId === "number" &&
+        typeof command.email === "string") ||
+      (command.type === "userProfiles.githubAttribution.resolve" &&
+        isStringArray(command.profileIds)) ||
+      (command.type === "userProfiles.channelIdentity.resolve" &&
+        (Check(UserChannelIdentitySchema, command.identity) ||
+          (isRecord(command.identity) &&
+            typeof command.identity.authorizationId === "string" &&
+            isRecord(command.identity.policy)))) ||
+      (command.type === "userProfiles.email.resolve" && typeof command.email === "string") ||
+      (command.type === "audit.run.inspect" &&
+        isRecord(command.input) &&
+        typeof command.input.now === "number" &&
+        (typeof command.input.runId === "string" ||
+          typeof command.input.executionId === "string")) ||
+      (command.type === "githubPublication.sharedObservation" &&
+        isRecord(command.input) &&
+        (command.input.kind === "repository" || command.input.kind === "worktree") &&
+        isRecord(command.input.session) &&
+        typeof command.input.session.agentId === "string" &&
+        typeof command.input.session.sessionKey === "string" &&
+        typeof command.input.session.sessionId === "string" &&
+        isRecord(command.input.selector) &&
+        isRecord(command.input.entry)) ||
+      (command.type === "sessionRepositoryWorkspaces.find" &&
+        Array.isArray(command.owners) &&
+        command.owners.every(
           (owner) =>
             isRecord(owner) &&
             typeof owner.agentId === "string" &&
             typeof owner.sessionKey === "string",
         )) ||
-      (input.command.type === "workspace.snapshot" &&
-        typeof input.command.workspaceDir === "string") ||
-      (input.command.type === "updateRuns.get" && typeof input.command.runId === "string") ||
-      input.command.type === "updateRuns.interruptedCandidate" ||
-      input.command.type === "updateRuns.status" ||
-      input.command.type === "updateRuns.historyStatus" ||
-      (input.command.type === "updateRuns.reconciliationCandidate" &&
-        typeof input.command.runId === "string") ||
-      (input.command.type === "updateRuns.reconciliationCandidates" &&
-        isRecord(input.command.input) &&
-        (input.command.input.explicit === undefined ||
-          typeof input.command.input.explicit === "boolean") &&
-        (input.command.input.requireAllActive === undefined ||
-          typeof input.command.input.requireAllActive === "boolean") &&
-        (input.command.input.legacyOnly === undefined ||
-          typeof input.command.input.legacyOnly === "boolean") &&
-        (input.command.input.repairHistorySinceMs === undefined ||
-          (typeof input.command.input.repairHistorySinceMs === "number" &&
-            Number.isFinite(input.command.input.repairHistorySinceMs))) &&
-        (input.command.input.runIds === undefined ||
-          (Array.isArray(input.command.input.runIds) &&
-            input.command.input.runIds.every((runId) => typeof runId === "string")))) ||
-      (input.command.type === "updateRuns.list" &&
-        isRecord(input.command.input) &&
-        (input.command.input.limit === undefined ||
-          typeof input.command.input.limit === "number") &&
-        (input.command.input.active === undefined ||
-          typeof input.command.input.active === "boolean") &&
-        (input.command.input.reason === undefined ||
-          typeof input.command.input.reason === "string") &&
-        (input.command.input.includeRunId === undefined ||
-          typeof input.command.input.includeRunId === "string")) ||
-      input.command.type === "fleet.list" ||
-      (input.command.type === "operatorApprovals.history" && isRecord(input.command.input)) ||
-      isTuiLastSessionReadCommand(input.command) ||
-      input.command.type === "nodeHost.config" ||
-      input.command.type === "operator.channelPolicy" ||
-      (input.command.type === "onboardingRecommendations.read" &&
-        typeof input.command.configKey === "string") ||
-      input.command.type === "sandboxRegistry.list" ||
-      input.command.type === "sandboxRegistry.browsers" ||
-      (input.command.type === "sandboxRegistry.get" &&
-        typeof input.command.containerName === "string") ||
-      (input.command.type === "sandboxRegistry.runtimeIds" &&
-        typeof input.command.backendId === "string" &&
-        typeof input.command.scopeKey === "string") ||
-      (input.command.type === "fleet.get" && typeof input.command.tenantId === "string") ||
-      input.command.type === "worktrees.cleanupState" ||
-      (input.command.type === "workerPlacements.changeSnapshot" &&
-        (input.command.profileIds === undefined ||
-          (Array.isArray(input.command.profileIds) &&
-            input.command.profileIds.every((id) => typeof id === "string")))) ||
-      input.command.type === "workers.placementRecoveryCandidates" ||
-      (input.command.type === "workers.placementProjection" &&
-        Array.isArray(input.command.sessionIds) &&
-        input.command.sessionIds.every((id) => typeof id === "string") &&
-        Array.isArray(input.command.conflictBindings)))
+      (command.type === "workspace.snapshot" && typeof command.workspaceDir === "string") ||
+      ((command.type === "updateRuns.get" ||
+        command.type === "updateRuns.reconciliationCandidate") &&
+        typeof command.runId === "string") ||
+      command.type === "updateRuns.interruptedCandidate" ||
+      command.type === "updateRuns.status" ||
+      command.type === "updateRuns.historyStatus" ||
+      (command.type === "updateRuns.reconciliationCandidates" &&
+        isRecord(command.input) &&
+        (command.input.explicit === undefined || typeof command.input.explicit === "boolean") &&
+        (command.input.requireAllActive === undefined ||
+          typeof command.input.requireAllActive === "boolean") &&
+        (command.input.legacyOnly === undefined || typeof command.input.legacyOnly === "boolean") &&
+        (command.input.repairHistorySinceMs === undefined ||
+          (typeof command.input.repairHistorySinceMs === "number" &&
+            Number.isFinite(command.input.repairHistorySinceMs))) &&
+        (command.input.runIds === undefined || isStringArray(command.input.runIds))) ||
+      (command.type === "updateRuns.list" &&
+        isRecord(command.input) &&
+        (command.input.limit === undefined || typeof command.input.limit === "number") &&
+        (command.input.active === undefined || typeof command.input.active === "boolean") &&
+        (command.input.reason === undefined || typeof command.input.reason === "string") &&
+        (command.input.includeRunId === undefined ||
+          typeof command.input.includeRunId === "string")) ||
+      command.type === "fleet.list" ||
+      (command.type === "operatorApprovals.history" && isRecord(command.input)) ||
+      isTuiLastSessionReadCommand(command) ||
+      command.type === "nodeHost.config" ||
+      command.type === "operator.channelPolicy" ||
+      (command.type === "onboardingRecommendations.read" &&
+        typeof command.configKey === "string") ||
+      command.type === "sandboxRegistry.list" ||
+      command.type === "sandboxRegistry.browsers" ||
+      (command.type === "sandboxRegistry.get" && typeof command.containerName === "string") ||
+      (command.type === "sandboxRegistry.runtimeIds" &&
+        typeof command.backendId === "string" &&
+        typeof command.scopeKey === "string") ||
+      (command.type === "fleet.get" && typeof command.tenantId === "string") ||
+      command.type === "worktrees.cleanupState" ||
+      (command.type === "workerPlacements.changeSnapshot" &&
+        (command.profileIds === undefined || isStringArray(command.profileIds))) ||
+      command.type === "workers.placementRecoveryCandidates" ||
+      (command.type === "workers.placementProjection" &&
+        isStringArray(command.sessionIds) &&
+        Array.isArray(command.conflictBindings)))
   );
 }
