@@ -8,7 +8,11 @@ import { fileURLToPath } from "node:url";
 import { isPidDefinitelyDead } from "../src/shared/pid-alive.ts";
 import { normalizeControlUiBuildInfo } from "../ui/src/build-info-normalizers.ts";
 import { resolveBuildIdentityEnvironment } from "./lib/build-identity.mts";
-import { assertRealOutputRoot } from "./lib/output-root-guard.mjs";
+import {
+  assertRealOutputRoot,
+  CONTROL_UI_BUILD_PREFIX,
+  controlUiBuildSiblingPid,
+} from "./lib/output-root-guard.mjs";
 import { createPnpmRunnerSpawnSpec } from "./pnpm-runner.mts";
 import { resolveNodePackageBin } from "./run-node-package-bin.mts";
 
@@ -313,22 +317,85 @@ function signalProcessTree(child: ChildProcess, signal: NodeJS.Signals, pids: nu
   }
 }
 
-function runSpawnCallSync(spawnCall: UiSpawnCall, label: string): void {
+type UiSpawnResult = { status: number | null; signal: NodeJS.Signals | null };
+
+function runSpawnCallSync(spawnCall: UiSpawnCall, label: string): UiSpawnResult {
   const { command, args: spawnArgs, options } = spawnCall;
-  let result;
   try {
-    result = spawnSync(command, spawnArgs, options);
+    return spawnSync(command, spawnArgs, options);
   } catch (err) {
     console.error(`Failed to launch ${label}:`, err);
-    process.exit(1);
-    return;
+    return { status: 1, signal: null };
   }
+}
+
+function exitForSpawnResult(result: UiSpawnResult): void {
   if (result.signal) {
     process.kill(process.pid, result.signal);
     return;
   }
   if ((result.status ?? 1) !== 0) {
     process.exit(result.status ?? 1);
+  }
+}
+
+function removeUiBuildDirectory(directory: string): void {
+  try {
+    fs.rmSync(directory, { recursive: true, force: true });
+  } catch (error) {
+    // Preserve the build outcome; a later build can reclaim locked leftovers.
+    console.warn(`Could not remove temporary Control UI output ${directory}:`, error);
+  }
+}
+
+function buildAndPublishUi(toolCall: UiSpawnCall, env: NodeJS.ProcessEnv): UiSpawnResult {
+  const dist = path.join(repoRoot, "dist");
+  const output = path.join(dist, "control-ui");
+  fs.mkdirSync(dist, { recursive: true });
+  for (const name of fs.readdirSync(dist)) {
+    const pid = controlUiBuildSiblingPid(name);
+    if (pid !== null && isPidDefinitelyDead(pid)) {
+      removeUiBuildDirectory(path.join(dist, name));
+    }
+  }
+  const staging = fs.mkdtempSync(path.join(dist, `${CONTROL_UI_BUILD_PREFIX}${process.pid}-`));
+  const retired = `${staging}.retired`;
+  try {
+    const validator = (script: string, ...args: string[]): [UiSpawnCall, string] => [
+      resolveSpawnCall(process.execPath, [path.join(here, script), ...args], env, {
+        cwd: repoRoot,
+      }),
+      script,
+    ];
+    const calls: [UiSpawnCall, string][] = [
+      [{ ...toolCall, args: [...toolCall.args, "--outDir", staging] }, "Control UI build"],
+      validator("check-control-ui-precompressed-assets.mts", staging),
+      validator("check-control-ui-performance.mts", "--report-only", "--dist", staging),
+    ];
+    for (const [call, label] of calls) {
+      const result = runSpawnCallSync(call, label);
+      if (result.signal || result.status !== 0) {
+        return result;
+      }
+    }
+    const hadOutput = fs.existsSync(output);
+    if (hadOutput) {
+      fs.renameSync(output, retired);
+    }
+    try {
+      fs.renameSync(staging, output);
+    } catch (error) {
+      if (hadOutput) {
+        fs.renameSync(retired, output);
+      }
+      throw new Error("Failed to publish Control UI build; previous output retained.", {
+        cause: error,
+      });
+    }
+    removeUiBuildDirectory(retired);
+    return { status: 0, signal: null };
+  } finally {
+    removeUiBuildDirectory(staging);
   }
 }
 
@@ -387,7 +454,7 @@ export function runUiCli(argv: string[] = process.argv.slice(2)): void {
 
   const noPnpmBuild = action === "build" && process.env.OPENCLAW_BUILD_ALL_NO_PNPM === "1";
   if (!noPnpmBuild && !depsInstalled(action === "test" ? "test" : "build")) {
-    runSpawnCallSync(resolvePnpmSpawnCall(["install"]), "pnpm");
+    exitForSpawnResult(runSpawnCallSync(resolvePnpmSpawnCall(["install"]), "pnpm"));
   }
 
   const [tool, ...args] = script;
@@ -398,21 +465,11 @@ export function runUiCli(argv: string[] = process.argv.slice(2)): void {
     env,
   );
   if (action === "build") {
-    runSpawnCallSync(toolCall, "Control UI build");
-    if (rest.some((arg) => arg === "--help" || arg === "-h")) {
-      return;
-    }
-    for (const [validator, ...validatorArgs] of [
-      ["check-control-ui-precompressed-assets.mts"],
-      ["check-control-ui-performance.mts", "--report-only"],
-    ] as const) {
-      runSpawnCallSync(
-        resolveSpawnCall(process.execPath, [path.join(here, validator), ...validatorArgs], env, {
-          cwd: repoRoot,
-        }),
-        validator,
-      );
-    }
+    exitForSpawnResult(
+      rest.some((arg) => arg === "--help" || arg === "-h")
+        ? runSpawnCallSync(toolCall, "Control UI build")
+        : buildAndPublishUi(toolCall, env),
+    );
     return;
   }
 
