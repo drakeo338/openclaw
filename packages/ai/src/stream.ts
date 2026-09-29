@@ -8,10 +8,33 @@ import type {
   SimpleStreamOptions,
   StreamOptions,
 } from "@openclaw/llm-core";
+import { bindAssistantMessageEventStream } from "@openclaw/llm-core/event-stream";
 import { createApiRegistry, type ApiRegistry } from "./api-registry.js";
+import {
+  createAiTransportHost,
+  getDefaultAiTransportHost,
+  runWithAiTransportHost,
+  type AiTransportHost,
+} from "./host.js";
 
 /** Creates an isolated LLM runtime backed by the supplied provider registry. */
-export function createLlmRuntime(registry: ApiRegistry = createApiRegistry()) {
+export function createLlmRuntime(
+  registry: ApiRegistry = createApiRegistry(),
+  runtimeOptions: { transportHost?: Partial<AiTransportHost> } = {},
+) {
+  const explicitHost =
+    runtimeOptions.transportHost === undefined
+      ? undefined
+      : createAiTransportHost(runtimeOptions.transportHost);
+  const startStream = (
+    start: () => AssistantMessageEventStreamContract,
+  ): AssistantMessageEventStreamContract => {
+    // A normal runtime uses its current embedding owner, even when invoked from
+    // another runtime's callback. Do not capture the default during construction.
+    const host = explicitHost ?? getDefaultAiTransportHost();
+    const run = <T>(operation: () => T): T => runWithAiTransportHost(host, operation);
+    return run(() => bindAssistantMessageEventStream(start(), run));
+  };
   function resolveApiProvider(api: Api) {
     const provider = registry.getApiProvider(api);
     if (!provider) {
@@ -25,7 +48,9 @@ export function createLlmRuntime(registry: ApiRegistry = createApiRegistry()) {
     context: Context,
     options?: ProviderStreamOptions,
   ): AssistantMessageEventStreamContract {
-    return resolveApiProvider(model.api).stream(model, context, options as StreamOptions);
+    return startStream(() =>
+      resolveApiProvider(model.api).stream(model, context, options as StreamOptions),
+    );
   }
 
   async function complete<TApi extends Api>(
@@ -41,7 +66,7 @@ export function createLlmRuntime(registry: ApiRegistry = createApiRegistry()) {
     context: Context,
     options?: SimpleStreamOptions,
   ): AssistantMessageEventStreamContract {
-    return resolveApiProvider(model.api).streamSimple(model, context, options);
+    return startStream(() => resolveApiProvider(model.api).streamSimple(model, context, options));
   }
 
   async function completeSimple<TApi extends Api>(
