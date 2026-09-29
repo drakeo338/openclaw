@@ -9,11 +9,6 @@ import { LEGACY_MANIFEST_KEYS, MANIFEST_KEY } from "../compat/legacy-names.js";
 import { parseBooleanValue } from "../utils/boolean.js";
 import { parseJsonWithJson5Fallback } from "../utils/parse-json-compat.js";
 
-/** Normalizes comma-delimited or loose array metadata fields into string lists. */
-export function normalizeStringList(input: unknown): string[] {
-  return normalizeCsvOrLooseStringList(input);
-}
-
 /** Reads a frontmatter field only when it is represented as a string value. */
 export function getFrontmatterString(
   frontmatter: Record<string, unknown>,
@@ -81,10 +76,10 @@ export function resolveOpenClawManifestRequires(
     return undefined;
   }
   return {
-    bins: normalizeStringList(requiresRaw.bins),
-    anyBins: normalizeStringList(requiresRaw.anyBins),
-    env: normalizeStringList(requiresRaw.env),
-    config: normalizeStringList(requiresRaw.config),
+    bins: normalizeCsvOrLooseStringList(requiresRaw.bins),
+    anyBins: normalizeCsvOrLooseStringList(requiresRaw.anyBins),
+    env: normalizeCsvOrLooseStringList(requiresRaw.env),
+    config: normalizeCsvOrLooseStringList(requiresRaw.config),
   };
 }
 
@@ -101,7 +96,7 @@ export function resolveOpenClawManifestInstall<T>(
 
 /** Extracts normalized OS allowlist entries from an OpenClaw manifest block. */
 export function resolveOpenClawManifestOs(metadataObj: Record<string, unknown>): string[] {
-  return normalizeStringList(metadataObj.os);
+  return normalizeCsvOrLooseStringList(metadataObj.os);
 }
 
 type ParsedOpenClawManifestInstallBase = {
@@ -143,7 +138,7 @@ export function parseOpenClawManifestInstallBase(
   if (typeof raw.label === "string") {
     spec.label = raw.label;
   }
-  const bins = normalizeStringList(raw.bins);
+  const bins = normalizeCsvOrLooseStringList(raw.bins);
   if (bins.length > 0) {
     spec.bins = bins;
   }
