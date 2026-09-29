@@ -39,6 +39,7 @@ export function readSharedBatchState(
     ...(states.some((state) => state.afterRequesterYield === true)
       ? { afterRequesterYield: true }
       : {}),
+    ...(source?.yieldedFinalDeliverable === true ? { yieldedFinalDeliverable: true } : {}),
     ...(source?.rearmGeneration !== undefined ? { rearmGeneration: source.rearmGeneration } : {}),
     ...(source?.lastError !== undefined ? { lastError: source.lastError } : {}),
     deferralCount: Math.max(0, ...states.map((state) => state.deferralCount ?? 0)),
