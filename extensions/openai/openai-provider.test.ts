@@ -1090,7 +1090,7 @@ describe("buildOpenAIProvider", () => {
     }
   });
 
-  it.each(["gpt-5.4", "gpt-6-astra", "gpt-6-sol", "gpt-6-luna"])(
+  it.each(["gpt-5.4", "gpt-6-astra", "gpt-6-sol", "gpt-6-luna", "gpt-6.1-sol"])(
     "maps discovered %s into a ChatGPT response model",
     async (modelId) => {
       const release = vi.fn(async () => undefined);
