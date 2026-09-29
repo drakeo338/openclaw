@@ -45,12 +45,13 @@ async function runDriver(driver: "token" | "webhook", failure?: "identity" | "se
   vi.stubGlobal(
     "fetch",
     vi.fn<typeof fetch>(async (input, init) => {
-      const url = new URL(String(input));
+      const incoming = new globalThis.Request(input, init);
+      const url = new URL(incoming.url);
       const request = {
-        method: init?.method ?? "GET",
+        method: incoming.method,
         path: `${url.pathname}${url.search}`.replace(/^\/api\/v10/u, ""),
-        authorization: new Headers(init?.headers).get("Authorization"),
-        ...(init?.body === undefined ? {} : { body: JSON.parse(String(init.body)) }),
+        authorization: incoming.headers.get("Authorization"),
+        ...(incoming.body === null ? {} : { body: await incoming.json() }),
       };
       requests.push(request);
       if (
