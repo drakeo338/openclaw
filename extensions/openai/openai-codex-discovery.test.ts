@@ -118,6 +118,9 @@ describe("OpenAI discovered subscription models", () => {
       });
       if (modelId === "gpt-6.1-sol") {
         const discovered = provider.models[0];
+        if (!discovered) {
+          throw new Error("expected discovered GPT-6.1 Sol");
+        }
         expect(discovered.thinkingLevelMap?.off).toBeNull();
         expect(
           clampThinkingLevel(
@@ -126,6 +129,10 @@ describe("OpenAI discovered subscription models", () => {
               provider: "openai",
               api: "openai-chatgpt-responses",
               baseUrl: provider.baseUrl,
+              input: discovered.input.filter(
+                (modality) => modality === "text" || modality === "image",
+              ),
+              contextWindow: discovered.contextWindow ?? 1_050_000,
             },
             "off",
           ),
