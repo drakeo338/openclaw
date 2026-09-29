@@ -1,6 +1,3 @@
-import { channel } from "node:diagnostics_channel";
-import { setImmediate } from "node:timers/promises";
-import type { Worker } from "node:worker_threads";
 import { createDeferred } from "openclaw/plugin-sdk/extension-shared";
 import type { ModelCompatConfig } from "openclaw/plugin-sdk/provider-model-types";
 import {
@@ -8,7 +5,7 @@ import {
   closeOpenClawStateDatabaseAsync,
   drainSessionDiskBudgetWorkers,
 } from "openclaw/plugin-sdk/sqlite-runtime-testing";
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, type TestContext } from "vitest";
 import {
   createStartedThreadHarness,
   createTestParams,
@@ -18,37 +15,14 @@ import {
   turnStartResult,
 } from "./run-attempt-test-harness.js";
 
+let readWorkerPools: NonNullable<TestContext["codexAttemptRuntime"]>["readWorkerPools"] | undefined;
+
 beforeAll(() => {
-  const workers = new Set<Worker>();
-  const allocationStacks = new Map<Worker, string>();
-  const workerCreations = channel("worker_threads");
-  const recordAllocation = (message: unknown) => {
-    // SAFETY: Node publishes { worker } synchronously from the Worker constructor.
-    const { worker } = message as { worker: Worker };
-    allocationStacks.set(worker, new Error("Worker allocated here").stack ?? "Stack unavailable");
-  };
-  workerCreations.subscribe(recordAllocation);
-  const trackWorker = (worker: Worker) => workers.add(worker);
-  process.on("worker", trackWorker);
-  // The scan pool is shared across cases; verify its file owner after all fixture cleanup.
+  // Logical pools are fixture-owned; the shared native supervisor is process-owned.
   return async () => {
     try {
-      // Node publishes Workers on nextTick; native exit precedes async_hooks.destroy.
-      await setImmediate();
-      expect(workers.size).toBeGreaterThan(0);
-      const liveThreadIds = [...workers].map((worker) => worker.threadId).filter((id) => id !== -1);
-      const liveWorkerStacks = [...workers]
-        .filter((worker) => worker.threadId !== -1)
-        .map(
-          (worker) => `${worker.threadId}: ${allocationStacks.get(worker) ?? "Stack unavailable"}`,
-        );
-      expect(
-        liveThreadIds,
-        `Worker threads surviving Codex fixture teardown: ${liveThreadIds.join(", ")}\n${liveWorkerStacks.join("\n")}`,
-      ).toEqual([]);
+      expect(readWorkerPools?.()).toMatchObject({ workerPoolCount: 0, workerPools: [] });
     } finally {
-      process.off("worker", trackWorker);
-      workerCreations.unsubscribe(recordAllocation);
       await drainSessionDiskBudgetWorkers();
       await closeOpenClawAgentDatabasesAsync();
       await closeOpenClawStateDatabaseAsync();
@@ -59,7 +33,15 @@ beforeAll(() => {
 setupRunAttemptTestHooks();
 
 describe("Codex reasoning effort across completed turns", () => {
-  it("changes high to off on the same Platform thread", async () => {
+  it("changes high to off on the same Platform thread", async (context) => {
+    const runtime = context.codexAttemptRuntime;
+    if (!runtime) {
+      throw new Error("Codex run-attempt tests require the shared extension runtime fixture");
+    }
+    readWorkerPools = runtime.readWorkerPools;
+    context.onTestFinished(() => {
+      expect(runtime.readWorkerPools().workerPoolCount).toBeGreaterThan(0);
+    });
     let turnCount = 0;
     let turnStarted = createDeferred<void>();
     const harness = createStartedThreadHarness(async (method) => {
