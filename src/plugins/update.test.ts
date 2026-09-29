@@ -1392,6 +1392,24 @@ describe("updateNpmInstalledPlugins", () => {
     expect(result.outcomes[0]?.nextVersion).toBe("2026.5.2");
   });
 
+  it("does not grant official trust to a vendor package using an official plugin id", async () => {
+    const { config } = createNpmUpdateFixture({
+      pluginId: "acpx",
+      packageName: "@vendor/acpx-fork",
+      installedVersion: "1.0.0",
+      registryVersion: "1.0.1",
+      installerVersion: "1.0.1",
+    });
+
+    await updatePlugin(config, "acpx");
+
+    expect(npmInstallCall()).toMatchObject({
+      spec: "@vendor/acpx-fork",
+      expectedPluginId: "acpx",
+      trustedSourceLinkedOfficialInstall: false,
+    });
+  });
+
   it("reports a newer latest release when the beta line for an exact pin is unavailable", async () => {
     const { config } = createNpmUpdateFixture({
       pluginId: "demo",
@@ -3282,6 +3300,29 @@ describe("syncPluginsForUpdateChannel", () => {
           'Failed to update legacy-chat: ClawHub ClawPack integrity mismatch. (ClawHub clawhub:legacy-chat@2026.5.1-beta.2).\nBundled relocation did not install the replacement plugin payload; resolve the error above, then run "openclaw update repair".',
       },
     ]);
+  });
+
+  it("externalizes a default-enabled bundled plugin without explicit configuration", async () => {
+    resolveBundledPluginSourcesMock.mockReturnValue(new Map());
+    mockSuccessfulNpmUpdate({
+      pluginId: "legacy-chat",
+      targetDir: "/tmp/openclaw-plugins/legacy-chat",
+      version: "2.0.0",
+    });
+
+    const result = await syncExternalizedPlugin({
+      config: {},
+      bridge: { enabledByDefault: true },
+    });
+
+    expect(result.changed).toBe(true);
+    expect(result.summary.switchedToNpm).toEqual(["legacy-chat"]);
+    expectRecordFields(result.config.plugins?.installs?.["legacy-chat"], {
+      source: "npm",
+      spec: "@openclaw/legacy-chat",
+      installPath: "/tmp/openclaw-plugins/legacy-chat",
+      version: "2.0.0",
+    });
   });
 
   it("does not externalize disabled bundled plugins", async () => {
