@@ -120,7 +120,8 @@ a.activity-current-work__row:hover {
   overflow: hidden;
 }
 
-.activity-feed__toolbar {
+.activity-feed__toolbar,
+.activity-live-toolbar {
   display: flex;
   flex: 0 0 auto;
   align-items: center;
@@ -917,14 +918,6 @@ a.activity-current-work__row:hover {
   white-space: nowrap;
 }
 
-.activity-live-toolbar {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-3) var(--space-4);
-}
-
 .activity-live-autofollow {
   display: inline-flex;
   align-items: center;
@@ -1159,19 +1152,12 @@ a.activity-current-work__row:hover {
     overflow: visible;
   }
 
-  .activity-feed__toolbar {
-    flex-wrap: wrap;
-  }
-
-  .activity-feed__search {
-    flex-basis: 100%;
-    order: -1;
-  }
-
+  .activity-feed__toolbar,
   .activity-live-toolbar {
     flex-wrap: wrap;
   }
 
+  .activity-feed__search,
   .activity-live-search {
     flex-basis: 100%;
     order: -1;

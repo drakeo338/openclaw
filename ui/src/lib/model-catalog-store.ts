@@ -190,6 +190,10 @@ function createModelCatalogRequest(params: {
   let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
   let started = false;
   let requestSent = false;
+  const rejectTimeout = (timeoutMs: number) =>
+    pending.reject(
+      new GatewayProtocolRequestTimeoutError({ method: "models.list", timeoutMs, requestSent }),
+    );
   const canRetry = () =>
     !pending.settled &&
     !controller.signal.aborted &&
@@ -253,13 +257,7 @@ function createModelCatalogRequest(params: {
       }
       const remaining = deadline === undefined ? undefined : deadline - Date.now();
       if (params.queued && duration !== undefined && remaining !== undefined && remaining <= 0) {
-        pending.reject(
-          new GatewayProtocolRequestTimeoutError({
-            method: "models.list",
-            timeoutMs: duration,
-            requestSent: false,
-          }),
-        );
+        rejectTimeout(duration);
         finishTransport();
         return;
       }
@@ -320,13 +318,7 @@ function createModelCatalogRequest(params: {
               stopWatching();
             }
             if (deadline !== undefined && duration !== undefined && deadline <= Date.now()) {
-              pending.reject(
-                new GatewayProtocolRequestTimeoutError({
-                  method: "models.list",
-                  timeoutMs: duration,
-                  requestSent,
-                }),
-              );
+              rejectTimeout(duration);
               return;
             }
             if (!canRetry()) {
@@ -344,17 +336,7 @@ function createModelCatalogRequest(params: {
     once: true,
   });
   if (duration !== undefined) {
-    deadlineTimer = setTimeout(
-      () =>
-        pending.reject(
-          new GatewayProtocolRequestTimeoutError({
-            method: "models.list",
-            timeoutMs: duration,
-            requestSent,
-          }),
-        ),
-      duration,
-    );
+    deadlineTimer = setTimeout(() => rejectTimeout(duration), duration);
   }
   return pending;
 }
