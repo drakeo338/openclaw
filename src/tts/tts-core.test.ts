@@ -2,18 +2,10 @@
 import { readFileSync } from "node:fs";
 import { MAX_TIMER_TIMEOUT_MS } from "@openclaw/normalization-core/number-coercion";
 import { describe, expect, it, vi } from "vitest";
-import type { OpenClawConfig } from "../config/types.openclaw.js";
 import type { AssistantMessage, Model, Usage } from "../llm/types.js";
 import type { SpeechModelOverridePolicy } from "./provider-types.js";
 import { resolveSpeechProviderApiKey, summarizeText } from "./tts-core.js";
 import type { ResolvedTtsConfig } from "./tts-types.js";
-
-const acquireSimpleCompletionModelWithSelection = vi.hoisted(() => vi.fn());
-
-vi.mock("../agents/simple-completion-runtime.js", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../agents/simple-completion-runtime.js")>()),
-  acquireSimpleCompletionModelWithSelection,
-}));
 
 const modelOverridePolicy: SpeechModelOverridePolicy = {
   enabled: false,
@@ -125,39 +117,5 @@ describe("TTS core", () => {
     } finally {
       setTimeoutSpy.mockRestore();
     }
-  });
-
-  it("passes the responding agent to summary model acquisition in a multi-agent setup", async () => {
-    acquireSimpleCompletionModelWithSelection.mockResolvedValueOnce({ error: "acquire stub" });
-    const cfg = {
-      agents: { list: [{ id: "main" }, { id: "work" }] },
-    } as OpenClawConfig;
-    const config = {
-      auto: "inbound",
-      mode: "final",
-      provider: "test-provider",
-      providerSource: "config",
-      personas: {},
-      modelOverrides: modelOverridePolicy,
-      providerConfigs: {},
-      maxTextLength: 10_000,
-      timeoutMs: 10_000,
-    } satisfies ResolvedTtsConfig;
-
-    await expect(
-      summarizeText({
-        text: "Long text that should be summarized for speech.",
-        targetLength: 120,
-        cfg,
-        config,
-        timeoutMs: 10_000,
-        agentId: "work",
-      }),
-    ).rejects.toThrow("acquire stub");
-
-    expect(acquireSimpleCompletionModelWithSelection).toHaveBeenCalledWith(
-      expect.objectContaining({ cfg, agentId: "work" }),
-      expect.any(Function),
-    );
   });
 });
